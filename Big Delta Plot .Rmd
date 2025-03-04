@@ -1,0 +1,249 @@
+
+```{r}
+#Set Working Directory
+
+#set your working directory to the folder that contains your excel spreadsheets and that you would like to save your graphs to. make sure to use / in the pathway to separate each part of your pathway eg "Document/IsotopePlots".
+setwd("yourpath")
+```
+
+
+
+
+```{r}
+
+#Load Your Libraries
+
+#load libraries that are needed for this code. If these packages are not installed, use install.package ("packageneeded") and then load the library
+#dplyr will not work if plyr is loaded
+
+library(readxl)
+library(ggplot2)
+library(ggalt)
+library(patchwork)
+library(ggrepel)
+library(car)
+library(dplyr) 
+library(paletteer)
+library(ggstar)
+library(magrittr)
+
+```
+
+
+
+```{r}
+#Naming and Loading Your Reference Fats
+
+
+#### Reference fat data ####
+#load in your reference fats data by inserting pathname into the read_xlsx quotation marks
+#make sure your file is in an xlsx format
+#This code assumes there are columns with column names that are "fatType", "sampleID", "d13C16", "d13C18", "D13C" where fatType is the type of animal, sampleID is the sample ID, d13C16 is the delta 13 carbon 16:0, d13C18 is the delta 13 carbon 18:0, and the D13C is the big delta value 
+
+
+reffats<-read_excel("/Users/elenasandoval/Documents/Working Directory/referencefats1.xlsx")
+
+
+print(reffats)
+
+```
+
+
+
+
+```{r}
+
+#Naming and Loading Your Isotope Data
+
+#load in your pot isotope data by inserting pathname into the read_xlsx quotation marks
+#make sure your file is in an xlsx format and your data is in the first sheet
+#This code assumes the column names are "Sample.ID", "CORRMEANC16", "CORRMEANC18", "BIGDELTA", "sitename", and "culture" and that it is located in the first sheet of your excel document, where sampleID is the sample ID,"CORRMEANC16" is the corrected d16, "CORRMEANC18" is the corrected d18, and BIGDELTA is the big delta value
+
+yourisotopedataframe<-read_excel("yourisotopepathway.xlsx")
+
+
+
+
+#if you want to plot the isotope data from only one site or culture, then use this code below. The function of which is to isolate the site or culture that you want to investigate. This will filter the sitename or culture column in your spreadsheet to select only one specific variable. 
+
+#Replace the variable "YourSiteName", on the left of the <- with a shorthand name that should use no spaces, such as Site1. Replace the "YourSiteName" on the right hand side of the <- code below (in the section sitename=="YourSiteName") with the name of your site that you want to investigate from your excel column "sitename". It is important that this is written exactly like in your excel spreadsheet. 
+
+#If you want to filter for a culture, use "culture=="culturename"" instead of "sitename =="YourSiteName""
+
+#The shorthand name can then replace the name "yourisotopedataframe" in the bigplotname code that is below (more instructions will be found in that code)
+
+
+YourSiteName<-yourisotopedataframe%>% filter(sitename =="Sokol")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+#Baseline Big Delta Plot using the reference fat data
+
+
+#this part of the code will use your loaded reference fats and combine the aquatic sources into one
+#the code below will rename your reference fat data into "reffats" using the <- code
+
+
+reffats <- reffats %>%
+  mutate(fatType = ifelse(fatType %in% c("Migratory fish", "Marine fish", "Freshwater fish"), "Aquatic", fatType))
+
+bigdeltadf <-reffats %>%
+  group_by(fatType) %>%
+  summarize(
+    Mean = mean(D13C, na.rm = TRUE),  # Mean for each fat type
+    SD = sd(D13C, na.rm = TRUE),      # SD for each fat type
+    Min = Mean - SD,                  # Min using Mean - SD
+    Max = Mean + SD)                  # Max using Mean + SD
+  
+bigdeltadf_filtered <- bigdeltadf %>% 
+  filter(fatType != "Aquatic")
+bigdeltadf_aq <- bigdeltadf %>% 
+  filter(fatType == "Aquatic")
+
+#All below code will create a baseline plot with labels, mixing bars, and markers for 1 SD of the reference fats
+
+bigplot <- ggplot() +
+  geom_errorbar(data=bigdeltadf_filtered, aes(x = -35, ymin = Min, ymax = Max), width = 0.4, alpha = 0.9, size = 0.6) +
+  geom_point(data=bigdeltadf_filtered, aes(x = -35, y = Mean), shape = 16, size = 3) +
+  geom_errorbar(data = bigdeltadf_aq %>% filter(fatType == "Aquatic"), 
+                aes(x = -13.5, ymin = Min, ymax = Max), 
+                width = 0.4, alpha = 0.9, size = 0.6) +   
+  geom_point(data = bigdeltadf_aq %>% filter(fatType == "Aquatic"), 
+             aes(x = -13.5, y = Mean), 
+             shape = 16, size = 2) +
+
+  # This code will add any additional plot elements here, such as annotations or labels
+  theme_minimal() +
+  # Add light grey mixing bar between the ruminant adipose and non-ruminant fats / ruminant dairy
+  geom_rect(
+    aes(xmin = -35, xmax = -13.5, ymin = -0.9721508, ymax = 0.3686557), 
+    fill = "lightgrey", alpha = 0.2) +
+
+  # Light grey rectangle between Ruminant adipose and Ruminant dairy
+  geom_rect(
+    aes(xmin = -35, xmax = -13.5, ymin = -2.7356492, ymax = -3.5921601), 
+    fill = "lightgrey", alpha = 0.2) +
+
+  
+  # This code will add additional elements, such as horizontal reference lines
+  
+ geom_hline(data = bigdeltadf %>% filter(fatType == "Ruminant adipose"),
+             aes(yintercept = -3.1),
+             linetype = "dotted", color = "black", linewidth = 0.5, alpha = 0.5) +
+  geom_hline(data = bigdeltadf %>% filter(fatType == "Ruminant adipose"),
+             aes(yintercept = -0.3),
+             linetype = "dotted", color = "black", linewidth = 0.5, alpha = 0.5) +
+  
+  # This code will annotate plot for different fat types
+  annotate("text", x = -37.5, y = 1.4, label = "        Non-ruminant \n adipose", size = 3, hjust = "center", family = "serif", angle = 90) +
+  annotate("text", x = -37.5, y = -1.8, label = " Ruminant \n adipose", size = 3, hjust = "center", family = "serif", angle = 90) +
+  annotate("text", x = -37.5, y = -5, label = "Ruminant \n dairy", size = 3, hjust = "center", family = "serif", angle = 90) + annotate("text", x = -12.2, y = 0.4, label = "Aquatic", size = 3, hjust = "center", family = "serif", angle = 90) +
+  # This code adds additional labels
+  annotate("text", x = -30, y = 4, label = expression(paste(C[3], " diet")), size = 5, family = "serif") +
+  annotate("text", x = -18, y = 4, label = expression(paste("Increasing ", C[4], " diet")), size = 5, family = "serif") +   
+  scale_x_continuous(
+    breaks = seq(-40, -10, 10), 
+    limits = c(-38.64, -11.36), 
+    position = 'bottom', 
+    labels = seq(-40, -10, 10),
+    sec.axis = sec_axis(trans = ~., breaks = seq(-40, -10, 10), labels = NULL),
+    name = expression(paste(delta^{13}, "C"[16:0], " (\u2030)")) ) +   
+  scale_y_continuous(
+    breaks = seq(-9, 5, 2),       # Set breaks every 2 units
+    limits = c(-8.364, 4.364),    # Keep original limits
+    position = 'right', 
+    labels = seq(-9, 5, 2),       # Apply the same sequence of labels
+    sec.axis = sec_axis(
+      trans = ~., 
+      breaks = seq(-11, 7, 18),    # Adjust the secondary axis for consistency
+      labels = NULL),
+    name = expression(paste(Delta^{13}, "C (\u2030)"))) +   
+  annotate("segment", x=-32, xend=-15, y=3.5, yend=3.5, size=0.5, 
+           arrow=arrow(length = unit(3, "mm"), type = "closed"), arrow.fill="black", 
+           lineend="butt", linejoin="mitre") + 
+  theme(
+    legend.position = "bottom",
+    panel.border = element_rect(colour = "black", fill = NA,),
+    panel.background = element_blank(),
+    panel.grid = element_blank())
+
+
+
+bigplot
+```
+
+
+
+```{r}
+
+#Your Isotope Data Added to the Baseline Plot Created Above
+
+
+#This code will add your baseline plot created above (named "bigplot") to your own pot isotope data. The name of the combined plot will be "bigplotname" as created by the <- 
+#The code will add using the + the baseline plot with a new plot that formats your pot isotope data
+#If you want to use only one site or culture replace the variable "yourisotopedataframe" with your named shorthand (such as Site1) that you created above
+
+bigplotname<-bigplot +
+  
+#this will print your isotope points on the baseline plot, with labels and arrows. If you don't want labels take out the "label=Sample.ID" and the section following the colour = "black" code and only leave in the first line of code
+  geom_text_repel(data = YourSiteName, aes(x = CORRMEANC16, y = BIGDELTA, label = Sample.ID), 
+                  colour = "black", size = 3, min.segment.length = 0.5, box.padding = 0.35, 
+                  point.padding = 0.5, max.overlaps = Inf, arrow = arrow(length = unit(0.010, "npc")), 
+                  nudge_x = 1, nudge_y = 1) +   
+
+  #this section will define how the points will come out as defined by colour and fill. you can use culture or site as the colour and fill, or anything you want
+#the ggtitle (currently B) will be the name of your plot
+geom_point(data=YourSiteName,aes(x=CORRMEANC16,y=BIGDELTA,colour=sitename,fill=sitename),size=2, alpha=0.88) + ggtitle ("B") 
+
+
+
+bigplotname
+
+```
+
+
+```{r}
+#The code below will save the plot into the folder you have designated as your working directory in a pdf format
+
+
+ggsave(filename = "bigplotname.pdf")
+
+```
+
+
+```{r}
+#Printing the Small Delta Plot and the Big Delta Plot together
+
+#This code will print the Small Delta Plot (smalldeltaplotwithmydata) and the Big Delta Plot (bigplotname) side by side
+
+#This code will load the patchwork package that is needed
+library(patchwork)
+
+#This code will print out the plots with the small delta on the left
+smalldeltaplotwithmydata + bigplotname
+
+#If you want the plots stacked vertically use the code "smalldeltaplotwithmydata/bigplotname" instead of "smalldeltaplotwithmydata + bigplotname" and the small delta will be stacked on top of the big delta plot
+
+
+```
+
+
+
+

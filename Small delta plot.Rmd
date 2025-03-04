@@ -1,0 +1,239 @@
+---
+title: "Small delta plot"
+output: html_document
+date: "2024-11-29"
+---
+
+```{r}
+#Set Working Directory
+
+#set your working directory to the folder that contains your excel spreadsheets and that you would like to save your graphs to. make sure to use / in the pathway to separate each part of your pathway eg "Document/IsotopePlots".
+setwd("yourpath")
+```
+
+
+
+```{r}
+
+#Load Your Libraries
+
+#load libraries that are needed for this code. If these packages are not installed, use install.package ("packageneeded") and then load the library
+#dplyr will not work if plyr is loaded
+
+library(readxl)
+library(ggplot2)
+library(ggalt)
+library(patchwork)
+library(ggrepel)
+library(car)
+library(dplyr) 
+library(paletteer)
+library(ggstar)
+library(magrittr)
+library(grid)
+
+```
+
+
+```{r}
+#Naming and Loading Your Reference Fats
+
+
+#### Reference fat data ####
+#load in your reference fats data by inserting pathname into the read_xlsx quotation marks
+#make sure your file is in an xlsx format
+#This code assumes there are columns with column names that are "fatType", "sampleID", "d13C16", "d13C18", "D13C" where fatType is the type of animal, sampleID is the sample ID, d13C16 is the delta 13 carbon 16:0, d13C18 is the delta 13 carbon 18:0, and the D13C is the big delta value. If this works correctly the words "New names:" will show in red after playing. 
+
+
+reffats<-read_xlsx("yourpathnameforreferencefatdatasheet.xlsx")
+
+```
+
+
+
+
+
+
+```{r}
+
+#Naming and Loading Your Isotope Data
+
+#load in your pot isotope data by inserting pathname into the read_xlsx quotation marks
+#make sure your file is in an xlsx format and your data is in the first sheet
+#This code assumes the column names are "Sample.ID", "CORRMEANC16", "CORRMEANC18", "BIGDELTA", "sitename", and "culture" and that it is located in the first sheet of your excel document, where sampleID is the sample ID,"CORRMEANC16" is the corrected d16, "CORRMEANC18" is the corrected d18, and BIGDELTA is the big delta value. If this works correctly the words "New names:" will show in red after playing. 
+
+yourisotopedataframe<-read_excel("yourpathnameforyourisotopedata.xlsx")
+
+
+
+
+#if you want to plot the isotope data from only one site or culture, then use this code below. The function of which is to isolate the site or culture that you want to investigate. This will filter the sitename or culture column in your spreadsheet to select only one specific variable. 
+
+#Replace the variable "YourSiteName", on the left of the <- with a shorthand name that should use no spaces, such as Site1. Replace the "YourSiteName" on the right hand side of the <- code below (in the section sitename=="YourSiteName") with the name of your site that you want to investigate from your excel column "sitename". It is important that this is written exactly like in your excel spreadsheet. 
+
+#If you want to filter for a culture, use "culture=="culturename"" instead of "sitename =="YourSiteName""
+
+#You can now replace this shorthand name (Site1) in the "yourisotopedataframe" in the #Adding your isotope data code that is below (more instructions will be found in that code)
+
+
+Site1<-yourisotopedataframe%>% filter(sitename =="YourSiteName")
+
+
+```
+
+
+
+
+
+
+
+```{r, fig.width=8, fig.height=6}
+
+#Creating your base small delta plot
+
+# This section of code defines a label for each fat type that is in your reference fat data. This code assumes you have ruminant dairy, ruminant adipose, porcine adipose, marine fish, migratory fish, and freshwater fish in your data (in a column labeled fatType). This part of the code connects a letter to these labels (A, B, etc) so that the 1 confidence interval ellipse can be labeled a letter for easier reading on the plot instead of a long label. This is for aesthetics only.
+
+
+fat_labels <- c("Ruminant dairy" = "A", 
+                "Ruminant adipose" = "B", 
+                "Porcine adipose" = "C", 
+                "Marine fish" = "D",
+                "Migratory fish" = "E",
+                "Freshwater fish" = "F")
+
+
+
+
+#This code will build the small delta plot with ellipses. This code is naming the plot "smalldeltaplot" by using the <-. Everything to the right of the <- is the code to build the plot. This code assumes you have named your reference fat datasheet that you have loaded above reffats (see Naming and Loading Your Reference Fats above). This also assumes you have a column labeled "d13C16" and "d13C18".
+
+
+smalldeltaplot <- ggplot(reffats, aes(x = d13C16, y = d13C18)) + # this code assigns the x and y axis to the     d13C16 (x) and d13C18 (y) and informs R that the data used will be "reffats"
+  
+  #This code below will build your ellipses based on a confidence interval of 0.684 (roughly 1 Standard Deviation). You can change this to a 95% confidence interval by changing the "level = 0.684" section of the code to "level = 0.95". This code includes all the data except Migratory fish, whihc is removed by the != code as this ellipse overlaps the rest.
+  
+ stat_ellipse(data = subset(reffats, fatType != "Migratory fish"),
+    aes(group = fatType), 
+    level = 0.684, 
+    size = 0.5,
+    linetype = "solid", 
+    color = "black" ) +
+  
+  # This code adds an ellipse that only includes Migratory fish and makes that ellipse grey and dashed to it is easier to read as it overlaps the other data. 
+  stat_ellipse(
+    data = subset(reffats, fatType == "Migratory fish"), 
+    aes(group = fatType), 
+    level = 0.684, 
+    size = 0.5,
+    linetype = "dashed", 
+    color = "darkgrey")+
+  
+  # This code is for ease of reading and will label the ellipses using the letter labels (A, B, etc) that were created above. The "aes(x = x - 1.4, y = y - 1.1" adjusts where the letter comes out on the ellipse based on x and y coordinates of the direct center of the ellipse. These can be adjusted based on how the plot looks to make the letter labels fall inside of the ellipses. This code does not include Marine fish and Migratory fish as the overlap caused the letter labels to fall outside of the ellipse.
+  
+  geom_text(data = subset(reffats, !(fatType %in% c("Marine fish", "Migratory fish"))) %>%
+              group_by(fatType) %>%
+              summarize(x = mean(d13C16, na.rm = TRUE), y = mean(d13C18, na.rm = TRUE)),
+            aes(x = x - 1.4, y = y - 1.1, label = fat_labels[fatType]),
+            color = "black", size = 3) +  # Set label size and style
+  
+   # This code adds the Marine fish letter label that was created above. This was due to this letter label falling outside of the ellipse so the x and y placement needed to be adjusted. As you can see the code for this letter label is aes(x = x + 1, y = y + 0.9, meaning it has been adjusted in a different direction that the letter labels above.
+  
+  geom_text(data = subset(reffats, fatType == "Marine fish") %>%
+              group_by(fatType) %>%
+              summarize(x = mean(d13C16, na.rm = TRUE), y = mean(d13C18, na.rm = TRUE)),
+            aes(x = x + 1, y = y + 0.9, label = fat_labels[fatType]),
+            color = "black", size = 3) +  # Set label size and style
+  
+  # This code adds the Migratory fish letter label that was created above. This was due to this letter label falling outside of the ellipse so the x and y placement needed to be adjusted. As you can see the code for this letter label is aes(x = x - 1.4, y = y - 1.7, meaning it has been adjusted in a different direction that the letter labels above. The color was also set to match the color of the ellipse.
+  
+  geom_text(data = subset(reffats, fatType == "Migratory fish") %>%
+              group_by(fatType) %>%
+              summarize(x = mean(d13C16, na.rm = TRUE), y = mean(d13C18, na.rm = TRUE)),
+            aes(x = x - 1.4, y = y - 1.7, label = fat_labels[fatType]),
+            color = "darkgrey", size = 3) +  # Set label size and style
+  
+ 
+#This part of the code creates the labels of the x and y axis as well as the title. As you can see the current title is "A' and the labels are δ13C16:0 and δ13C18:0
+  labs(
+    title = expression("A"),
+    x = expression(" " * delta^13 * "C"[16:0] * " (‰)"),
+    y = expression("" * delta^13 * "C"[18:0] * " (‰)")) +
+ 
+  #This part of the code creates the scale of the x and y plot. In this code, there will be a label on the x and y number scale by 4 (so at -12, -16, -20, etc). 
+  
+  scale_x_continuous(breaks = seq(-40, -12, by = 4)) +
+  scale_y_continuous(breaks = seq(-44, -12, by = 4)) +
+
+  #This part of the code makes the plot look nice with a border 
+    
+  theme(
+    panel.border = element_rect(colour = "black", fill = NA, size = 1),
+    panel.background = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(5.5, 5.5, 40, 5.5)  # Add space at the bottom for the fat type legend
+  ) +
+  
+  #This part of the code sets how long your x and y axis will be
+  
+  expand_limits(x = c(-40, -12), y = c(-44, -12))  +
+  
+#This code places the letter labels next to what they mean eg: A:Ruminant dairy. Make sure they match the letter labels that were created at the beginning of this section. The "gp = gpar(fontsize = 10)), xmin = -40, xmax = -34, ymin = -24, ymax = -14)" code will position this on the graph, so this may need adjusting based on how tall and wide you want your graph. Do so by adjusting the "xmin = -40, xmax = -34, ymin = -24, ymax = -14" where xmin/xmax is how far to the left/right and ymin/ymax is how far to the top/bottom this will come out at.
+  
+   annotation_custom(
+    grob = textGrob(
+      label = paste0(
+        "A: Ruminant dairy\n", 
+        "B: Ruminant adipose\n", 
+        "C: Porcine adipose\n", 
+        "D: Marine fish\n",
+        "E: Migratory fish\n",
+        "F: Freshwater fish\n"), 
+      gp = gpar(fontsize = 10)), xmin = -40, xmax = -34, ymin = -24, ymax = -14)  # Position the text below the plot
+#This section of code will create your plot that you named "smalldeltaplot"  
+smalldeltaplot
+
+
+```
+
+
+
+```{r}
+#Adding your isotope data
+
+#This code will take the "smalldeltaplot" created in the section "Creating your base small delta plot" and add your own isotope data. This code assumes you have a datasheet that is named "yourisotopedataframe" which was created in the section "Naming and Loading Your Isotope Data". This assumes you have a column labeled "CORRMEANC16" for the δ13C:16 and one labeled "CORRMEANC18" for the δ13C:18. The color can be used to identify site or culture (assuming there is a column in your datasheet with culture or site). Currently it is using culture in the code. The colors will be randomly generated. If you would like to choose your colors manually, then after the "alpha = 0.88) + "  add the code  "scale_colour_manual(values = c('blue', 'red', 'orange', 'purple')) +". Make sure to include a + before and after this new chunk of code. Make sure you have as many colors as you have cultures or sites or R will remove data. and places the legend on the right side of the graph. If you want to produce a graph using sites instead of cultures, replace color = culture with color=sitename
+
+#If you are only plotting one site/culture, then replace "yourisotopedataframe" in the code below with the shorthand name (eg: Site1) that was created above in the #Naming and Loading Your Isotope Data, section
+
+
+
+
+  
+ smalldeltaplotwithmydata <- smalldeltaplot +
+  
+ geom_point(data =yourisotopedataframe, aes(x = CORRMEANC16, y = CORRMEANC18, color = culture), size = 2, alpha = 0.88) +
+
+  
+  
+#This part of the code adds the legend. The legend will not show up unless needed (a color or fill has to be designated which will be done below in the "Adding your isotope data" section). If you want it on the bottom, replace "right" with "bottom". This also works with top or left. If you don't want a legend, remove the code below for theme and labs
+  
+theme(legend.position = "right") +  # Keep site legend on the right
+    
+
+#This part of the code adds the legend labels. The current label is "Culture" for the aesthetics chosen in the "geom_point" section of the code (color). If using sitename, replace "Culture" with sitename
+  labs(
+    color = "Culture")  + 
+  theme(legend.position = "none")
+
+
+# Legend title for color
+    # Legend title for fill
+  
+smalldeltaplotwithmydata
+
+#If you put "smalldeltaplotwithmydata" in the console and push insert, this graph will pop up in the plot section on the right. Push export to save as a png
+
+```
+
+
+
+
+
